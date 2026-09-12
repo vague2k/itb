@@ -1,0 +1,17 @@
+{
+    "$schema": "https://shadcn-templ.com/schema/components.json",
+    "style": "base-mira",
+    "tailwind": {
+        "css": "views/assets/css/globals.css",
+        "baseColor": "zinc",
+        "cssVariables": true
+    },
+    "rtl": false,
+    "iconLibrary": "lucide",
+    "menuColor": "default",
+    "menuAccent": "subtle",
+    "aliases": {
+        "components": "itb.ihatedoing.work/views/shadcn",
+        "utils": "itb.ihatedoing.work/views/shadcn/utils"
+    }
+}

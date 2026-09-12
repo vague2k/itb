@@ -1,0 +1,13 @@
+package pages
+
+import (
+	db "itb.ihatedoing.work/server/database/generated"
+	"itb.ihatedoing.work/views/components"
+	"itb.ihatedoing.work/views/layouts"
+)
+
+templ Categories(rows []db.ListCategoriesRow) {
+	@layouts.Base("Categories") {
+		@components.CategoriesSection(rows)
+	}
+}

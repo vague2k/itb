@@ -1,0 +1,110 @@
+package components
+
+import (
+	"strconv"
+
+	"itb.ihatedoing.work/internal/money"
+	db "itb.ihatedoing.work/server/database/generated"
+	"itb.ihatedoing.work/views/shadcn/button"
+	"itb.ihatedoing.work/views/shadcn/card"
+	"itb.ihatedoing.work/views/shadcn/field"
+	"itb.ihatedoing.work/views/shadcn/input"
+)
+
+templ CategoriesSection(rows []db.ListCategoriesRow) {
+	<div id="categories-section" class="space-y-6">
+		@card.Card() {
+			@card.Header() {
+				@card.Title() {
+					New category 
+				}
+				@card.Description() {
+					Give it a name and an optional starting amount. 
+				}
+			}
+			@card.Content() {
+				<form
+					hx-post="/categories"
+					class="flex flex-col gap-3 sm:flex-row sm:items-end"
+				>
+					@field.Field() {
+						@field.Label(field.LabelProps{For: "name"}) {
+							Name 
+						}
+						@field.Content() {
+							@input.Input(input.Props{ID: "name", Name: "name", Placeholder: "Groceries", Required: true})
+						}
+					}
+					@field.Field() {
+						@field.Label(field.LabelProps{For: "starting_amount"}) {
+							Starting amount 
+						}
+						@field.Content() {
+							@input.Input(input.Props{ID: "starting_amount", Name: "starting_amount", Placeholder: "0.00"})
+						}
+					}
+					@button.Button(button.Props{Type: button.TypeSubmit}) {
+						Create 
+					}
+				</form>
+			}
+		}
+		@CategoriesTable(rows)
+	</div>
+}
+
+templ CategoriesTable(rows []db.ListCategoriesRow) {
+	if len(rows) == 0 {
+		<div class="border-border text-muted-foreground rounded-lg border border-dashed px-6 py-10 text-center text-sm">
+			No categories yet. Create one above.
+		</div>
+	} else {
+		<div class="border-border overflow-hidden rounded-lg border">
+			<table class="w-full text-sm">
+				<thead class="bg-muted/50 text-muted-foreground text-xs">
+					<tr>
+						<th class="px-4 py-2 text-left font-medium">Category</th>
+						<th class="px-4 py-2 text-right font-medium">Balance</th>
+						<th class="px-4 py-2"></th>
+					</tr>
+				</thead>
+				<tbody>
+					for _, row := range rows {
+						@CategoryRow(row)
+					}
+				</tbody>
+			</table>
+		</div>
+	}
+}
+
+templ CategoryRow(row db.ListCategoriesRow) {
+	<tr class="border-border border-t">
+		<td class="px-4 py-2">
+			<a href={ templ.SafeURL(categoryPath(row.ID)) } class="hover:text-primary font-medium">{ row.Name }</a>
+		</td>
+		<td class={ "px-4 py-2 text-right font-medium tabular-nums " + balanceClass(row.BalanceCents) }>
+			{ money.Format(row.BalanceCents) }
+		</td>
+		<td class="px-4 py-2 text-right">
+			<button
+				hx-delete={ categoryPath(row.ID) }
+				hx-target="#categories-section"
+				hx-swap="outerHTML"
+				hx-confirm="Delete this category and all of its transactions?"
+				class="text-muted-foreground hover:text-destructive text-xs"
+			>
+				Delete
+			</button>
+		</td>
+	</tr>
+}
+
+func categoryPath(id int64) string { return "/categories/" + strconv.FormatInt(id, 10) }
+
+func balanceClass(cents int64) string {
+	if cents < 0 {
+		return "text-destructive"
+	}
+	return "text-foreground"
+}

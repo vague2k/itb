@@ -1,0 +1,117 @@
+package components
+
+import (
+	"itb.ihatedoing.work/internal/money"
+	db "itb.ihatedoing.work/server/database/generated"
+	"itb.ihatedoing.work/server/database/models"
+	"itb.ihatedoing.work/views/shadcn/button"
+	"itb.ihatedoing.work/views/shadcn/card"
+	"itb.ihatedoing.work/views/shadcn/field"
+	"itb.ihatedoing.work/views/shadcn/input"
+)
+
+templ CategoryDetailFragment(category db.GetCategoryRow, transactions []models.Transaction) {
+	<div id="category-detail" class="space-y-6">
+		<div class="flex items-start justify-between gap-4">
+			<div>
+				<a href="/" class="text-muted-foreground text-xs hover:underline">← All categories</a>
+				<h1 class="font-heading text-xl font-semibold">{ category.Name }</h1>
+			</div>
+			<div class={ "font-heading text-2xl tabular-nums " + balanceTextClass(category.BalanceCents) }>
+				{ money.Format(category.BalanceCents) }
+			</div>
+		</div>
+
+		@card.Card() {
+			@card.Header() {
+				@card.Title() { Add transaction }
+				@card.Description() { Enter an amount, then choose income or expense. }
+			}
+			@card.Content() {
+				<form
+					hx-post={ categoryPath(category.ID) + "/transactions" }
+					hx-target="#category-detail"
+					hx-swap="outerHTML"
+					class="space-y-3"
+				>
+					<div class="flex flex-col gap-3 sm:flex-row sm:items-end">
+						@field.Field() {
+							@field.Label(field.LabelProps{For: "amount"}) { Amount }
+							@field.Content() {
+								@input.Input(input.Props{ID: "amount", Name: "amount", Placeholder: "0.00", Required: true})
+							}
+						}
+						@field.Field() {
+							@field.Label(field.LabelProps{For: "note"}) { Note }
+							@field.Content() {
+								@input.Input(input.Props{ID: "note", Name: "note", Placeholder: "Optional"})
+							}
+						}
+					</div>
+					<div class="flex gap-2">
+						@button.Button(button.Props{
+							Type:       button.TypeSubmit,
+							Attributes: templ.Attributes{"name": "kind", "value": "income"},
+						}) {
+							Add income
+						}
+						@button.Button(button.Props{
+							Type:       button.TypeSubmit,
+							Variant:    button.VariantOutline,
+							Attributes: templ.Attributes{"name": "kind", "value": "expense"},
+						}) {
+							Add expense
+						}
+					</div>
+				</form>
+			}
+		}
+
+		@TransactionList(transactions)
+	</div>
+}
+
+templ TransactionList(transactions []models.Transaction) {
+	if len(transactions) == 0 {
+		<div class="border-border text-muted-foreground rounded-lg border border-dashed px-6 py-10 text-center text-sm">
+			No transactions yet.
+		</div>
+	} else {
+		<div class="border-border overflow-hidden rounded-lg border">
+			<table class="w-full text-sm">
+				<thead class="bg-muted/50 text-muted-foreground text-xs">
+					<tr>
+						<th class="px-4 py-2 text-left font-medium">Date</th>
+						<th class="px-4 py-2 text-left font-medium">Note</th>
+						<th class="px-4 py-2 text-right font-medium">Amount</th>
+					</tr>
+				</thead>
+				<tbody>
+					for _, transaction := range transactions {
+						<tr class="border-border border-t">
+							<td class="text-muted-foreground px-4 py-2 text-xs">
+								{ transaction.CreatedAt.Format("Jan 2, 2006 15:04") }
+							</td>
+							<td class="px-4 py-2">{ transaction.Note }</td>
+							<td class={ amountClass(transaction.AmountCents) }>{ money.Format(transaction.AmountCents) }</td>
+						</tr>
+					}
+				</tbody>
+			</table>
+		</div>
+	}
+}
+
+func balanceTextClass(cents int64) string {
+	if cents < 0 {
+		return "text-destructive"
+	}
+	return "text-foreground"
+}
+
+func amountClass(cents int64) string {
+	if cents < 0 {
+		return "text-destructive px-4 py-2 text-right tabular-nums"
+	}
+	return "text-emerald-600 px-4 py-2 text-right tabular-nums"
+}

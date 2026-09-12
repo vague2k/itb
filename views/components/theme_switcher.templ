@@ -1,0 +1,51 @@
+package components
+
+import (
+	"itb.ihatedoing.work/views/shadcn/button"
+	"itb.ihatedoing.work/views/shadcn/icon"
+)
+
+// ThemeSwitcher is a three-way toggle for system, light, and dark. The active
+// segment is highlighted from the data-theme attribute on the html element,
+// which the head script in the base layout sets before first paint, so the
+// correct segment is lit without a client-side setup pass.
+templ ThemeSwitcher() {
+	<div class="border-border inline-flex items-center gap-0.5 rounded-md border p-0.5" role="group" aria-label="Theme">
+		@button.Button(button.Props{
+			Size:    button.SizeIconSm,
+			Variant: button.VariantGhost,
+			Class:   "[[data-theme=system]_&]:bg-accent [[data-theme=system]_&]:text-accent-foreground",
+			Attributes: templ.Attributes{
+				"data-theme-set": "system",
+				"title":          "System theme",
+				"aria-label":     "System theme",
+			},
+		}) {
+			@icon.Monitor(icon.Props{Class: "size-4"})
+		}
+		@button.Button(button.Props{
+			Size:    button.SizeIconSm,
+			Variant: button.VariantGhost,
+			Class:   "[[data-theme=light]_&]:bg-accent [[data-theme=light]_&]:text-accent-foreground",
+			Attributes: templ.Attributes{
+				"data-theme-set": "light",
+				"title":          "Light theme",
+				"aria-label":     "Light theme",
+			},
+		}) {
+			@icon.Sun(icon.Props{Class: "size-4"})
+		}
+		@button.Button(button.Props{
+			Size:    button.SizeIconSm,
+			Variant: button.VariantGhost,
+			Class:   "[[data-theme=dark]_&]:bg-accent [[data-theme=dark]_&]:text-accent-foreground",
+			Attributes: templ.Attributes{
+				"data-theme-set": "dark",
+				"title":          "Dark theme",
+				"aria-label":     "Dark theme",
+			},
+		}) {
+			@icon.Moon(icon.Props{Class: "size-4"})
+		}
+	</div>
+}

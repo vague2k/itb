@@ -1,0 +1,43 @@
+package layouts
+
+import (
+	"itb.ihatedoing.work/views/components"
+	shadcn "itb.ihatedoing.work/views/shadcn"
+	"itb.ihatedoing.work/views/shadcn/toast"
+)
+
+templ Base(title string) {
+	<!DOCTYPE html>
+	<html lang="en">
+		<head>
+			<meta charset="UTF-8"/>
+			<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+			<title>{ title } · itb</title>
+			<script>
+				(() => {
+					const stored = localStorage.getItem("theme") || "system";
+					const dark = stored === "dark" || (stored === "system" && window.matchMedia("(prefers-color-scheme: dark)").matches);
+					document.documentElement.classList.toggle("dark", dark);
+					document.documentElement.dataset.theme = stored;
+				})();
+			</script>
+			<link rel="stylesheet" href="/assets/css/output.css"/>
+			<script src="/assets/js/htmx.min.js" defer></script>
+			<script src="/assets/js/theme.js" defer></script>
+			@shadcn.Scripts()
+		</head>
+		<body class="bg-background text-foreground min-h-screen">
+			<div class="mx-auto max-w-3xl px-6 py-10">
+				<header class="mb-8 flex items-center justify-between">
+					<div class="flex items-baseline gap-2">
+						<a href="/" class="font-heading text-lg font-semibold tracking-tight">itb</a>
+						<span class="text-muted-foreground text-xs">Budget tracker</span>
+					</div>
+					@components.ThemeSwitcher()
+				</header>
+				{ children... }
+			</div>
+			@toast.Toaster()
+		</body>
+	</html>
+}

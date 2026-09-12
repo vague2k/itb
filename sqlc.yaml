@@ -1,0 +1,13 @@
+version: "2"
+sql:
+  - engine: "sqlite"
+    schema: "server/database/migrations"
+    queries: "server/database/queries"
+    gen:
+      go:
+        package: "db"
+        out: "server/database/generated"
+        sql_package: "database/sql"
+        output_models_path: "server/database/models"
+        output_models_package: "models"
+        output_models_import: "itb.ihatedoing.work/server/database/models"

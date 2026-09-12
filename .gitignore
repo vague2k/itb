@@ -1,0 +1,20 @@
+# build output
+dist/
+views/assets/css/output.css
+*_templ.go
+
+# environment variables
+.env
+.env.staging
+.env.production
+
+# macOS-specific files
+.DS_Store
+
+# sqlite database
+data/
+
+# misc
+tmp/
+nvim.log
+.playwright*

@@ -1,0 +1,14 @@
+package pages
+
+import (
+	db "itb.ihatedoing.work/server/database/generated"
+	"itb.ihatedoing.work/server/database/models"
+	"itb.ihatedoing.work/views/components"
+	"itb.ihatedoing.work/views/layouts"
+)
+
+templ CategoryDetail(category db.GetCategoryRow, transactions []models.Transaction) {
+	@layouts.Base(category.Name) {
+		@components.CategoryDetailFragment(category, transactions)
+	}
+}
