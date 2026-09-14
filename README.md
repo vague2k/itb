@@ -47,7 +47,8 @@ Money is stored as `int64` cents everywhere and only parsed or formatted through
 
 ```sh
 just dev      # Tailwind watch + templ generate --watch (restarts server on .templ change)
-just build    # templ generate + minified Tailwind + go build -> ./tmp/server
+just build [env]              # build for development (default), staging, or production
+just deploy staging|production   # build, sync to server, migrate, restart service
 just test     # go test ./...
 just migrate up|down|status   # go run ./cmd/server migrate
 

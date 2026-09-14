@@ -1,0 +1,17 @@
+# ITB production service.
+
+[Unit]
+Description=ITB (production)
+After=network.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/root/itb
+ExecStart=/root/itb/server
+Restart=always
+RestartSec=3
+NoNewPrivileges=true
+
+[Install]
+WantedBy=multi-user.target

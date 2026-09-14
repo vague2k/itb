@@ -1,0 +1,17 @@
+# ITB staging service.
+
+[Unit]
+Description=ITB (staging)
+After=network.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/root/itb-staging
+ExecStart=/root/itb-staging/server
+Restart=always
+RestartSec=3
+NoNewPrivileges=true
+
+[Install]
+WantedBy=multi-user.target
