@@ -30,4 +30,4 @@ deploy env:
 
 # Run all tests
 test:
-    go test ./...
+    go test ./... -json | tparse

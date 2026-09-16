@@ -2,71 +2,66 @@ package services
 
 import (
 	"context"
-	"errors"
+	"database/sql"
 	"testing"
+
+	"github.com/stretchr/testify/require"
 
 	"itb.ihatedoing.work/config"
 	"itb.ihatedoing.work/internal/testdb"
 )
 
-func newCategoryService(t *testing.T) (*config.Config, *CategoryService) {
+func newCategoryService(t *testing.T) (*sql.DB, *CategoryService) {
 	t.Helper()
 	sqlDB, q := testdb.Open(t)
 	c := &config.Config{UnderlyingDB: sqlDB, Database: q}
-	return c, NewCategoryService(c)
+	return sqlDB, NewCategoryService(c)
 }
 
 func TestCreateCategoryWithStartingAmount(t *testing.T) {
 	_, svc := newCategoryService(t)
 	ctx := context.Background()
 
-	if err := svc.Create(ctx, "Groceries", 50000); err != nil {
-		t.Fatalf("Create: %v", err)
-	}
+	require.NoError(t, svc.Create(ctx, "Groceries", 50000))
 
 	rows, err := svc.List(ctx)
-	if err != nil {
-		t.Fatalf("List: %v", err)
-	}
-	if len(rows) != 1 {
-		t.Fatalf("want 1 category, got %d", len(rows))
-	}
-	if rows[0].BalanceCents != 50000 {
-		t.Errorf("balance = %d, want 50000", rows[0].BalanceCents)
-	}
+	require.NoError(t, err)
+	require.Len(t, rows, 1)
+	require.Equal(t, "Groceries", rows[0].Name)
+	require.Equal(t, int64(50000), rows[0].BalanceCents)
 }
 
 func TestCreateCategoryRequiresName(t *testing.T) {
 	_, svc := newCategoryService(t)
 
 	err := svc.Create(context.Background(), "   ", 0)
+
 	var ue UserError
-	if !errors.As(err, &ue) {
-		t.Fatalf("want UserError, got %v", err)
-	}
+	require.ErrorAs(t, err, &ue)
+	require.Equal(t, "Name is required", ue.Error())
 }
 
 func TestDeleteCategoryCascadesTransactions(t *testing.T) {
-	cfg, svc := newCategoryService(t)
+	sqlDB, svc := newCategoryService(t)
 	ctx := context.Background()
 
-	if err := svc.Create(ctx, "Groceries", 10000); err != nil {
-		t.Fatalf("Create: %v", err)
-	}
+	require.NoError(t, svc.Create(ctx, "Groceries", 10000))
 	rows, err := svc.List(ctx)
-	if err != nil {
-		t.Fatalf("List: %v", err)
-	}
+	require.NoError(t, err)
 
-	if err := svc.Delete(ctx, rows[0].ID); err != nil {
-		t.Fatalf("Delete: %v", err)
-	}
+	require.NoError(t, svc.Delete(ctx, rows[0].ID))
 
 	var count int
-	if err := cfg.UnderlyingDB.QueryRowContext(ctx, "SELECT COUNT(*) FROM transactions").Scan(&count); err != nil {
-		t.Fatalf("count transactions: %v", err)
-	}
-	if count != 0 {
-		t.Errorf("want 0 transactions after cascade delete, got %d", count)
-	}
+	require.NoError(t, sqlDB.QueryRowContext(ctx, "SELECT COUNT(*) FROM transactions").Scan(&count))
+	require.Zero(t, count)
+}
+
+func TestClosedDBCategoryReturnsInternalError(t *testing.T) {
+	sqlDB, svc := newCategoryService(t)
+	sqlDB.Close()
+
+	err := svc.Create(context.Background(), "Groceries", 0)
+
+	var ie InternalError
+	require.ErrorAs(t, err, &ie)
 }

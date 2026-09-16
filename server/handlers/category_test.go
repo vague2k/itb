@@ -2,6 +2,8 @@ package handlers
 
 import (
 	"context"
+	"database/sql"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -10,97 +12,108 @@ import (
 	"testing"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/stretchr/testify/require"
 
 	"itb.ihatedoing.work/config"
 	"itb.ihatedoing.work/internal/testdb"
 )
 
-func newTestHandler(t *testing.T) *Handler {
+func newTestHandler(t *testing.T) (*Handler, *sql.DB) {
 	t.Helper()
 	sqlDB, q := testdb.Open(t)
-	return NewHandler(&config.Config{UnderlyingDB: sqlDB, Database: q})
+	c := &config.Config{UnderlyingDB: sqlDB, Database: q}
+	return NewHandler(c), sqlDB
 }
 
-func postForm(t *testing.T, h http.Handler, target string, fields map[string]string) *httptest.ResponseRecorder {
-	t.Helper()
-	form := url.Values{}
-	for k, v := range fields {
-		form.Set(k, v)
+func categoriesRouter(h *Handler) http.Handler {
+	mux := chi.NewRouter()
+	mux.Post("/categories", h.Category.Create)
+	mux.Delete("/categories/{id}", h.Category.Delete)
+	mux.Post("/categories/{id}/transactions", h.Transaction.Create)
+	return mux
+}
+
+func serveRequest(h http.Handler, method, target string, body io.Reader, contentType string) *httptest.ResponseRecorder {
+	r := httptest.NewRequest(method, target, body)
+	if contentType != "" {
+		r.Header.Set("Content-Type", contentType)
 	}
-	req := httptest.NewRequest(http.MethodPost, target, strings.NewReader(form.Encode()))
-	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	w := httptest.NewRecorder()
-	h.ServeHTTP(w, req)
+	h.ServeHTTP(w, r)
 	return w
 }
 
-func TestCreateCategoryRedirects(t *testing.T) {
-	h := newTestHandler(t)
-	mux := chi.NewRouter()
-	mux.Post("/categories", h.Category.Create)
-
-	w := postForm(t, mux, "/categories", map[string]string{
-		"name":            "Groceries",
-		"starting_amount": "500.00",
-	})
-
-	if w.Code != http.StatusOK {
-		t.Fatalf("status = %d, want 200", w.Code)
+func urlEncoded(fields map[string]string) (io.Reader, string) {
+	vals := url.Values{}
+	for k, v := range fields {
+		vals.Set(k, v)
 	}
-	if got := w.Header().Get("HX-Redirect"); got != "/" {
-		t.Errorf("HX-Redirect = %q, want %q", got, "/")
-	}
+	return strings.NewReader(vals.Encode()), "application/x-www-form-urlencoded"
 }
 
-func TestCreateCategoryInvalidAmountToasts(t *testing.T) {
-	h := newTestHandler(t)
-	mux := chi.NewRouter()
-	mux.Post("/categories", h.Category.Create)
-
-	w := postForm(t, mux, "/categories", map[string]string{
-		"name":            "Groceries",
-		"starting_amount": "not-money",
-	})
-
-	if got := w.Header().Get("HX-Retarget"); got != "[data-tui-toaster]" {
-		t.Errorf("HX-Retarget = %q, want [data-tui-toaster]", got)
-	}
-	if got := w.Header().Get("HX-Reswap"); got != "beforeend" {
-		t.Errorf("HX-Reswap = %q, want beforeend", got)
-	}
-	body := w.Body.String()
-	if !strings.Contains(body, "data-tui-toast-ssr") {
-		t.Errorf("body missing toast stub: %s", body)
-	}
-	if !strings.Contains(body, "valid dollar amount") {
-		t.Errorf("body missing validation message: %s", body)
-	}
-}
-
-func TestCreateTransactionRendersUpdatedBalance(t *testing.T) {
-	h := newTestHandler(t)
+func TestCreateCategorySuccess(t *testing.T) {
+	h, _ := newTestHandler(t)
+	router := categoriesRouter(h)
 	ctx := context.Background()
-	if err := h.Category.Categories.Create(ctx, "Groceries", 10000); err != nil {
-		t.Fatalf("seed category: %v", err)
-	}
+
+	body, ct := urlEncoded(map[string]string{"name": "Groceries", "starting_amount": "500.00"})
+	w := serveRequest(router, http.MethodPost, "/categories", body, ct)
+
+	require.Equal(t, http.StatusOK, w.Code)
+	require.Equal(t, "/", w.Header().Get("HX-Redirect"))
+
+	list, err := h.Category.Categories.List(ctx)
+	require.NoError(t, err)
+	require.Len(t, list, 1)
+	require.Equal(t, "Groceries", list[0].Name)
+	require.Equal(t, int64(50000), list[0].BalanceCents)
+}
+
+func TestCreateCategoryMalformedAmount(t *testing.T) {
+	h, _ := newTestHandler(t)
+
+	body, ct := urlEncoded(map[string]string{"name": "Groceries", "starting_amount": "not-money"})
+	w := serveRequest(categoriesRouter(h), http.MethodPost, "/categories", body, ct)
+
+	require.Equal(t, "[data-tui-toaster]", w.Header().Get("HX-Retarget"))
+	require.Equal(t, "beforeend", w.Header().Get("HX-Reswap"))
+	require.Empty(t, w.Header().Get("HX-Redirect"), "malformed amount must not redirect")
+	require.Contains(t, w.Body.String(), "data-tui-toast-ssr")
+	require.Contains(t, w.Body.String(), "valid dollar amount")
+}
+
+func TestDeleteCategoryViaHandler(t *testing.T) {
+	h, sqlDB := newTestHandler(t)
+	router := categoriesRouter(h)
+	ctx := context.Background()
+
+	require.NoError(t, h.Category.Categories.Create(ctx, "Groceries", 10000))
 	rows, err := h.Category.Categories.List(ctx)
-	if err != nil {
-		t.Fatalf("list categories: %v", err)
-	}
+	require.NoError(t, err)
 
-	mux := chi.NewRouter()
-	mux.Post("/categories/{id}/transactions", h.Transaction.Create)
+	target := "/categories/" + strconv.FormatInt(rows[0].ID, 10)
+	w := serveRequest(router, http.MethodDelete, target, nil, "")
 
-	w := postForm(t, mux, "/categories/"+strconv.FormatInt(rows[0].ID, 10)+"/transactions", map[string]string{
-		"amount": "25.50",
-		"kind":   "expense",
-		"note":   "lunch",
-	})
+	require.Equal(t, http.StatusOK, w.Code)
 
-	if w.Code != http.StatusOK {
-		t.Fatalf("status = %d, want 200", w.Code)
-	}
-	if !strings.Contains(w.Body.String(), "$74.50") {
-		t.Errorf("body missing updated balance: %s", w.Body.String())
-	}
+	var count int
+	require.NoError(t, sqlDB.QueryRowContext(ctx, "SELECT COUNT(*) FROM categories").Scan(&count))
+	require.Zero(t, count)
+}
+
+func TestCreateTransactionViaHandler(t *testing.T) {
+	h, _ := newTestHandler(t)
+	router := categoriesRouter(h)
+	ctx := context.Background()
+
+	require.NoError(t, h.Category.Categories.Create(ctx, "Groceries", 10000))
+	rows, err := h.Category.Categories.List(ctx)
+	require.NoError(t, err)
+
+	body, ct := urlEncoded(map[string]string{"amount": "25.50", "kind": "expense", "note": "lunch"})
+	target := "/categories/" + strconv.FormatInt(rows[0].ID, 10) + "/transactions"
+	w := serveRequest(router, http.MethodPost, target, body, ct)
+
+	require.Equal(t, http.StatusOK, w.Code)
+	require.Contains(t, w.Body.String(), "$74.50")
 }

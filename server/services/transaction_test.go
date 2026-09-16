@@ -2,48 +2,53 @@ package services
 
 import (
 	"context"
-	"errors"
+	"database/sql"
 	"testing"
+
+	"github.com/stretchr/testify/require"
 
 	"itb.ihatedoing.work/config"
 	"itb.ihatedoing.work/internal/testdb"
 )
 
-func TestTransactionUpdatesBalance(t *testing.T) {
+func newTransactionFixture(t *testing.T) (*sql.DB, *CategoryService, *TransactionService) {
+	t.Helper()
 	sqlDB, q := testdb.Open(t)
-	cfg := &config.Config{UnderlyingDB: sqlDB, Database: q}
-	categories := NewCategoryService(cfg)
-	transactions := NewTransactionService(cfg)
+	c := &config.Config{UnderlyingDB: sqlDB, Database: q}
+	return sqlDB, NewCategoryService(c), NewTransactionService(c)
+}
+
+func TestTransactionUpdatesBalance(t *testing.T) {
+	_, categories, transactions := newTransactionFixture(t)
 	ctx := context.Background()
 
-	if err := categories.Create(ctx, "Groceries", 10000); err != nil {
-		t.Fatalf("Create category: %v", err)
-	}
+	require.NoError(t, categories.Create(ctx, "Groceries", 10000))
 	rows, err := categories.List(ctx)
-	if err != nil {
-		t.Fatalf("List: %v", err)
-	}
+	require.NoError(t, err)
 
-	if err := transactions.Create(ctx, rows[0].ID, -2500, "lunch"); err != nil {
-		t.Fatalf("Create transaction: %v", err)
-	}
+	require.NoError(t, transactions.Create(ctx, rows[0].ID, -2500, "lunch"))
 
 	category, err := categories.Get(ctx, rows[0].ID)
-	if err != nil {
-		t.Fatalf("Get: %v", err)
-	}
-	if category.BalanceCents != 7500 {
-		t.Errorf("balance = %d, want 7500", category.BalanceCents)
-	}
+	require.NoError(t, err)
+	require.Equal(t, int64(7500), category.BalanceCents)
 }
 
 func TestTransactionRequiresAmount(t *testing.T) {
-	sqlDB, q := testdb.Open(t)
-	transactions := NewTransactionService(&config.Config{UnderlyingDB: sqlDB, Database: q})
+	_, _, transactions := newTransactionFixture(t)
 
 	err := transactions.Create(context.Background(), 1, 0, "")
+
 	var ue UserError
-	if !errors.As(err, &ue) {
-		t.Fatalf("want UserError, got %v", err)
-	}
+	require.ErrorAs(t, err, &ue)
+	require.Equal(t, "Amount is required", ue.Error())
+}
+
+func TestClosedDBTransactionReturnsInternalError(t *testing.T) {
+	sqlDB, _, transactions := newTransactionFixture(t)
+	sqlDB.Close()
+
+	err := transactions.Create(context.Background(), 1, -2500, "lunch")
+
+	var ie InternalError
+	require.ErrorAs(t, err, &ie)
 }

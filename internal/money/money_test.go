@@ -1,6 +1,10 @@
 package money
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/stretchr/testify/require"
+)
 
 func TestParse(t *testing.T) {
 	cases := []struct {
@@ -15,23 +19,22 @@ func TestParse(t *testing.T) {
 		{"-4.5", -450},
 		{"+3", 300},
 		{"  7.00  ", 700},
+		{"-$4.50", -450},
+		{"$-4.50", -450},
+		{"-$1,234.56", -123456},
+		{"+$3", 300},
 	}
 	for _, c := range cases {
 		got, err := Parse(c.in)
-		if err != nil {
-			t.Fatalf("Parse(%q) unexpected error: %v", c.in, err)
-		}
-		if got != c.want {
-			t.Errorf("Parse(%q) = %d, want %d", c.in, got, c.want)
-		}
+		require.NoError(t, err, "Parse(%q)", c.in)
+		require.Equal(t, c.want, got, "Parse(%q)", c.in)
 	}
 }
 
 func TestParseInvalid(t *testing.T) {
-	for _, in := range []string{"", "abc", "1.234", "1.2.3", "$", "--1"} {
-		if _, err := Parse(in); err == nil {
-			t.Errorf("Parse(%q) expected error", in)
-		}
+	for _, in := range []string{"", "abc", "1.234", "1.2.3", "$", "-", "-$", "--1", " "} {
+		_, err := Parse(in)
+		require.Error(t, err, "Parse(%q)", in)
 	}
 }
 
@@ -48,13 +51,11 @@ func TestFormat(t *testing.T) {
 		{-450, "-$4.50"},
 	}
 	for _, c := range cases {
-		if got := Format(c.in); got != c.want {
-			t.Errorf("Format(%d) = %q, want %q", c.in, got, c.want)
-		}
+		require.Equal(t, c.want, Format(c.in), "Format(%d)", c.in)
 	}
 }
 
-func TestRoundTrip(t *testing.T) {
+func TestParseIntoFormat(t *testing.T) {
 	cases := []struct {
 		in   string
 		want string
@@ -66,11 +67,14 @@ func TestRoundTrip(t *testing.T) {
 	}
 	for _, c := range cases {
 		cents, err := Parse(c.in)
-		if err != nil {
-			t.Fatalf("Parse(%q): %v", c.in, err)
-		}
-		if got := Format(cents); got != c.want {
-			t.Errorf("round trip %q = %q, want %q", c.in, got, c.want)
-		}
+		require.NoError(t, err, "Parse(%q)", c.in)
+
+		formatted := Format(cents)
+		require.Equal(t, c.want, formatted, "round trip %q", c.in)
+
+		// Format's output must parse back to the same cents.
+		back, err := Parse(formatted)
+		require.NoError(t, err, "Parse(Format(%d))", cents)
+		require.Equal(t, cents, back, "Parse(Format(%d))", cents)
 	}
 }

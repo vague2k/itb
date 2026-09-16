@@ -7,22 +7,25 @@ import (
 	"strings"
 )
 
-// ErrInvalid is returned when a user-entered amount cannot be parsed.
 var ErrInvalid = errors.New("invalid amount")
 
-// Parse converts a user-entered amount such as "$1,234.56", "12", or "-4.5"
+// Parse converts a string such as "$123", "-$100", "12", or "-4.5"
 // into an integer number of cents.
+//
+// The passed in string is assumed to be a dollar amount.
 func Parse(s string) (int64, error) {
 	s = strings.TrimSpace(s)
-	s = strings.TrimPrefix(s, "$")
 	s = strings.ReplaceAll(s, ",", "")
-	if s == "" {
-		return 0, ErrInvalid
-	}
+	s = strings.TrimPrefix(s, "$")
 
+	// The currency symbol and sign may appear in any order
 	negative := strings.HasPrefix(s, "-")
 	s = strings.TrimPrefix(s, "-")
 	s = strings.TrimPrefix(s, "+")
+	s = strings.TrimPrefix(s, "$")
+	if s == "" {
+		return 0, ErrInvalid
+	}
 
 	whole, frac, _ := strings.Cut(s, ".")
 	if whole == "" {
@@ -51,8 +54,8 @@ func Parse(s string) (int64, error) {
 	return total, nil
 }
 
-// Format renders an integer number of cents as "$1,234.56", or "-$12.00" when
-// negative.
+// Format will return a formatted string of an integer number of cents as
+// "$1,234.56", or "-$12.00" when negative.
 func Format(cents int64) string {
 	if cents < 0 {
 		return fmt.Sprintf("-$%s.%02d", groupThousands(strconv.FormatInt(-cents/100, 10)), -cents%100)
